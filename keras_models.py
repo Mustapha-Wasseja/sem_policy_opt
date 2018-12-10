@@ -1,27 +1,29 @@
-import pandas as pd
+import numpy as np
+import pandas as pd 
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import *
 
-from model_helpers import prep_data_for_keras_model
 
 def get_keras_model(train_x, train_y, val_x, val_y):
 
-    num_features = train_x.shape[1]
+    days_before_flight = Input(shape=(1,))
+    jb_demand_signal = Input(shape=(1,))
+    jb_price = Input(shape=(1,))
+    inputs_without_jb_price = Concatenate()([days_before_flight, jb_demand_signal])
+    x0 = Dense(50, activation='elu')(inputs_without_jb_price)
+    delta_price = Dense(1, name='delta_price')(x0)
 
-    inputs = Input(shape=(num_features,))
-    x = Dense(50, activation='elu')(inputs)
-    x1 = Dense(10, activation='elu')(x)
-    x2 = Dense(10, activation='elu')(x)
-    x3 = Dense(10, activation='elu')(x)
-    delta_price = Dense(1)(x1)
-    # TODO: Let delta_price affect quantities
-    jb_qty = Dense(1)(x2)
-    delta_qty = Dense(1)(x3)
+    x1 = Concatenate()([inputs_without_jb_price, delta_price, jb_price])
+    x2 = Dense(50, activation='elu')(x1)
 
-    keras_model = Model(inputs=inputs, outputs=[delta_price, jb_qty, delta_qty])
-    keras_model.compile(optimizer=tf.train.AdamOptimizer(0.01), loss='mse', loss_weights=[1e-3, 2, 1])
+    jb_qty = Dense(1, name='jb_qty')(x2)
+    delta_qty = Dense(1, name='delta_qty')(x2)
+
+    keras_model = Model(inputs=[days_before_flight, jb_demand_signal, jb_price], 
+                        outputs=[delta_price, jb_qty, delta_qty])
+    keras_model.compile(optimizer=tf.train.AdamOptimizer(0.01), loss='mse', loss_weights=[2e-3, 3, 1])
 
     #TODO: add restore_best_weights=True as argument in es_monitor (once that change hits TensorFlow)
     es_monitor = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, mode='auto')
@@ -29,7 +31,7 @@ def get_keras_model(train_x, train_y, val_x, val_y):
                     validation_data = [val_x, val_y],
                     steps_per_epoch = 3,
                     validation_steps = 1,
-                    epochs=50,
+                    epochs=40,
                     callbacks = [es_monitor],
                     verbose=0)
 
@@ -38,7 +40,7 @@ def get_keras_model(train_x, train_y, val_x, val_y):
 
 def prep_data_for_keras_model(data, skip_y=False):
     features = ['days_before_flight', 'jetblue_demand_signal', 'jetblue_price']
-    x = data[features].values
+    x = [data[f].values for f in features]
     if skip_y:
         return x
     else:
