@@ -22,15 +22,16 @@ class Market(gym.Env):
         self.demand_signal_noisiness = demand_signal_noisiness
         self.seats_per_flight = seats_per_flight
         self.sales_window_length = sales_window_length
-        self.action_space = spaces.Discrete(self.max_demand_level)
+        self.action_space = spaces.Discrete(self.max_demand_level)  # The price we set
 
-        self.observation_space = spaces.Dict({
-            'days_remaining': spaces.Discrete(self.sales_window_length + 1),
-            # Demand signal space larger than max_demand_level to accomodate noisiness
-            'demand_signal': spaces.Discrete(2*self.max_demand_level + 100),
-            'my_seats_remaining': spaces.Discrete(self.seats_per_flight + 1),
-            'competitor_flight_full': spaces.Discrete(2)
-        })
+        # Experiment using this instead of line above
+        self.observation_space = spaces.MultiDiscrete([
+            (0, self.sales_window_length + 1),      # Days remaining
+            # Demand signal space is larger than (0, max_demand_level) due to noisiness
+            (-1 * self.max_demand_level, self.max_demand_level + 100),      # demand signal
+            (0, self.seats_per_flight),             # own seats remaining
+            (0, 1)                                  # competitor flight full
+        ])
 
         obs = self.reset()
 
@@ -42,7 +43,7 @@ class Market(gym.Env):
 
         Parameters
         ----------
-        action : jetblue price (int)
+        action : jetblue price (will be converted to int. Ideally, comes in as int)
 
         Returns
         -------
@@ -56,7 +57,7 @@ class Market(gym.Env):
             info (dict) :
                  diagnostic information for debugging.
         """
-        jetblue_price = action
+        jetblue_price = int(action)
         if self.current_day == 0:
                 jetblue_seats_avail = self.seats_per_flight
                 delta_seats_avail = self.seats_per_flight
@@ -76,6 +77,8 @@ class Market(gym.Env):
                                                                                                 jetblue_seats_avail, 
                                                                                                 delta_seats_avail 
                                                                                                 )
+        delta_price, jetblue_seats_sold, delta_seats_sold  = (self._probabilistic_rounding(i) 
+                                                                for i in (delta_price, jetblue_seats_sold, delta_seats_sold))
         jetblue_revenue = jetblue_seats_sold * jetblue_price
         self.__data.append({'days_before_flight': days_before_flight, 
                            'demand_level': self.demand_level, 
@@ -127,18 +130,25 @@ class Market(gym.Env):
             delta_flight_full = self.__data[-1]['delta_seats_avail'] == 0
         else:
             jetblue_seats_avail = self.seats_per_flight
-            delta_flight_full = False
+            delta_flight_full = 0
                 
-        obs = [self.jetblue_demand_signal,
+        obs = [int(i) for i in 
+                [self.jetblue_demand_signal,
                 self.sales_window_length - self.current_day,
-               jetblue_seats_avail,
-               int(delta_flight_full)]
+                jetblue_seats_avail,
+                delta_flight_full]]
         return obs
 
     @property
     def data_df(self):
         assert self.episode_over
         return pd.DataFrame(self.__data)
+
+    def _probabilistic_rounding(self, num):
+        int_val = int(num)
+        remainder = num - int_val
+        probabilistic_remainder = np.random.binomial(n=1, p=remainder)
+        return int_val + probabilistic_remainder
 
     def seed(self, seed):
         random.seed(seed)
