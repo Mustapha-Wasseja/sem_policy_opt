@@ -29,7 +29,7 @@ def get_keras_model(train_x, train_y, val_x, val_y, verbose=0):
                         outputs=[delta_price, jb_qty, delta_qty])
     keras_model.compile(optimizer=tf.train.AdamOptimizer(0.01), 
                         loss=['mse', 'poisson', 'poisson'], 
-                        loss_weights=[2e-4, 4, 1])
+                        loss_weights=[1e-4, 4, 1])
 
     #TODO: add restore_best_weights=True as argument in es_monitor (once that change hits TensorFlow)
     es_monitor = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, mode='auto')
