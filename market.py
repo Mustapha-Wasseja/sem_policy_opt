@@ -15,24 +15,29 @@ class Market(gym.Env):
     when the agent receives which reward.
     """
 
-    def __init__(self, market_conditions, max_demand_level, demand_signal_noisiness, seats_per_flight, sales_window_length):
+    def __init__(self, market_conditions, max_demand_level, demand_signal_noisiness, seats_per_flight, sales_window_length, summarize_on_episode_end=False):
         # TODO: Move demand_signal_noisiness into MarketConditions
         self.market_conditions = market_conditions
         self.max_demand_level = max_demand_level
         self.demand_signal_noisiness = demand_signal_noisiness
         self.seats_per_flight = seats_per_flight
         self.sales_window_length = sales_window_length
-        self.action_space = spaces.Discrete(self.max_demand_level)  # The price we set
+        # SAC implementation demands symmetric action space around 0
+        self.action_space = spaces.Box(low=-1*self.max_demand_level, 
+                                       high=self.max_demand_level, 
+                                       shape=(1,), dtype=np.int32)  # The price we set
 
-        # Experiment using this instead of line above
-        self.observation_space = spaces.MultiDiscrete([
-            (0, self.sales_window_length + 1),      # Days remaining
-            # Demand signal space is larger than (0, max_demand_level) due to noisiness
-            (-1 * self.max_demand_level, self.max_demand_level + 100),      # demand signal
-            (0, self.seats_per_flight),             # own seats remaining
-            (0, 1)                                  # competitor flight full
-        ])
-
+        obs_space_low = np.array([0,                             # days remaining
+                                  -1 * self.max_demand_level,    # demand signal
+                                  0,                             # own seats remaining
+                                  0])                            # int representation of competitor flight full
+                        
+        obs_space_high = np.array([self.sales_window_length + 1, # days remaining
+                                   self.max_demand_level + 100,  # demand signal
+                                   self.seats_per_flight,        # own seats remaining
+                                   1])                           # int representation of competitor flight full 
+        self.observation_space = spaces.Box(obs_space_low, obs_space_high, dtype=np.int32)
+        self.summarize_on_episode_end = summarize_on_episode_end
         obs = self.reset()
 
 
@@ -57,7 +62,7 @@ class Market(gym.Env):
             info (dict) :
                  diagnostic information for debugging.
         """
-        jetblue_price = int(action)
+        jetblue_price = action
         if self.current_day == 0:
                 jetblue_seats_avail = self.seats_per_flight
                 delta_seats_avail = self.seats_per_flight
@@ -77,8 +82,6 @@ class Market(gym.Env):
                                                                                                 jetblue_seats_avail, 
                                                                                                 delta_seats_avail 
                                                                                                 )
-        delta_price, jetblue_seats_sold, delta_seats_sold  = (self._probabilistic_rounding(i) 
-                                                                for i in (delta_price, jetblue_seats_sold, delta_seats_sold))
         jetblue_revenue = jetblue_seats_sold * jetblue_price
         self.__data.append({'days_before_flight': days_before_flight, 
                            'demand_level': self.demand_level, 
@@ -105,7 +108,21 @@ class Market(gym.Env):
 
     @property
     def episode_over(self):
-        return self.current_day == self.sales_window_length
+        is_over = self.current_day == self.sales_window_length
+        if is_over and self.summarize_on_episode_end:
+            self._episode_end_logging()
+        return is_over
+
+    def _episode_end_logging(self):
+        # TODO: Convert to use logging instead of print
+        data_df = self.data_df
+        total_seats_sold = data_df.jetblue_seats_sold.sum()
+        max_seats_in_day = data_df.jetblue_seats_sold.max()
+        min_price = data_df.jetblue_price.min()
+        mean_price = data_df.jetblue_price.mean()
+        print("Total seats sold: {}. Max sold in day: {}. Min price: {}. Average price {}.".format( \
+                total_seats_sold, max_seats_in_day, min_price, mean_price))
+
 
     def reset(self):
         """
@@ -141,14 +158,7 @@ class Market(gym.Env):
 
     @property
     def data_df(self):
-        assert self.episode_over
         return pd.DataFrame(self.__data)
-
-    def _probabilistic_rounding(self, num):
-        int_val = int(num)
-        remainder = num - int_val
-        probabilistic_remainder = np.random.binomial(n=1, p=remainder)
-        return int_val + probabilistic_remainder
 
     def seed(self, seed):
         random.seed(seed)

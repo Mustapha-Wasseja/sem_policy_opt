@@ -8,7 +8,6 @@ plt.style.use('fivethirtyeight')
 
 def run_env(testing_market, price_fn, n_times=1):
 
-    testing_market.collect_all_data = True
     all_data = []
     all_rewards = []
 
@@ -23,7 +22,7 @@ def run_env(testing_market, price_fn, n_times=1):
             obs, reward, episode_over, debug_info = testing_market.step(my_price)
             cum_reward += reward
         all_rewards.append(cum_reward)
-        all_data.append(testing_market.data_df)    # data is None if testing_market.collect_all_data is False
+        all_data.append(testing_market.data_df)
     return pd.Series(all_rewards), pd.concat(all_data)
 
 
