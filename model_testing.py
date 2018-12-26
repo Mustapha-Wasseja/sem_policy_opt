@@ -49,7 +49,7 @@ def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_ma
 def r_squared(model, val_data):
     val_x = prep_for_keras_model(val_data, skip_y=True)
     preds = model.predict(val_x)
-    return {'delta_price_r2': r2_score(preds[0], val_data.delta_price.values),
-            'jb_qty_sold_r2': r2_score(preds[1], val_data.jetblue_seats_sold.values),
-            'delta_qty_sold_r2': r2_score(preds[2], val_data.delta_seats_sold.values)}
+    return {'delta_price_r2': r2_score(val_data.delta_price.values, preds[0].ravel()),
+            'jb_qty_sold_r2': r2_score(val_data.jetblue_seats_sold.values, preds[1].ravel()),
+            'delta_qty_sold_r2': r2_score(val_data.delta_seats_sold.values, preds[2].ravel())}
     
