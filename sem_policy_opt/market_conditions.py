@@ -2,7 +2,7 @@ import numpy as np
 import numpy as np
 import pandas as pd
 
-from keras_models import prep_for_keras_model
+from sem_policy_opt.keras_models import prep_for_keras_model
 
 
 class CompetitiveConditions(object):

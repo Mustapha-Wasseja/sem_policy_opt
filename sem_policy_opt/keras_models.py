@@ -8,31 +8,50 @@ from tensorflow.keras.layers import *
 
 def get_keras_model(train_x, train_y, val_x, val_y, verbose=0):
 
+    #TODO: add restore_best_weights=True as argument in es_monitor (once that change hits TensorFlow)
+    es_monitor = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, mode='auto')
+
     days_before_flight = Input(shape=(1,))
     jb_demand_signal = Input(shape=(1,))
     jb_price = Input(shape=(1,))
     inputs_without_jb_price = Concatenate()([days_before_flight, jb_demand_signal])
-    x0 = Dense(50, activation='elu')(inputs_without_jb_price)
+    x0 = Dense(100, activation='elu')(inputs_without_jb_price)
     delta_price = Dense(1, activation='softplus', name='delta_price')(x0)
+
+    # Build just the part of the model that predicts delta_price. This doesn't include jetblue_price
+    # as an input because delta can't see that.
+    delta_price_model = Model(inputs=[days_before_flight, jb_demand_signal],
+                              outputs=[delta_price])
+    delta_price_model.compile(optimizer='adam',
+                              loss='mse')
+    delta_price_model.fit( x=train_x[:-1], 
+                           y=train_y[-1],
+                           validation_data = [val_x[:-1], val_y[-1]],
+                           steps_per_epoch = 5,
+                           validation_steps = 1,
+                           epochs=30, callbacks = [es_monitor],
+                           verbose=verbose)
+
+    # Freeze layers that predict delta_price and train model to predict quantities
+    x0.trainable = False
+    delta_price.trainable = False
+
 
     qty_predictors = Concatenate()([inputs_without_jb_price, delta_price, jb_price])
     
-    x1 = Dense(50, activation='elu')(qty_predictors)
-    x10 = Dropout(0.5)(x1)
-    x11 = Dense(50, activation='elu')(x10)
-    jb_qty = Dense(1, activation='softplus', name='jb_qty')(x11)
+    x1 = Dense(100, activation='elu')(qty_predictors)
+    x2 = Dropout(0.5)(x1)
+    x3 = Dense(100, activation='elu')(x2)
+    jb_qty = Dense(1, activation='softplus', name='jb_qty')(x3)
 
-    #x2 = Dense(50, activation='elu')(qty_predictors)    
-    delta_qty = Dense(1, activation='softplus', name='delta_qty')(x11)
+    delta_qty = Dense(1, activation='softplus', name='delta_qty')(x3)
 
     keras_model = Model(inputs=[days_before_flight, jb_demand_signal, jb_price], 
                         outputs=[delta_price, jb_qty, delta_qty])
-    keras_model.compile(optimizer=tf.train.AdamOptimizer(0.01), 
-                        loss=['mse', 'poisson', 'poisson'], 
-                        loss_weights=[1e-4, 4, 1])
+    keras_model.compile(optimizer='adam', 
+                        loss='poisson', 
+                        loss_weights=[0, 4, 1]) # 0 weight on delta_price because that part of model is already fit
 
-    #TODO: add restore_best_weights=True as argument in es_monitor (once that change hits TensorFlow)
-    es_monitor = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, mode='auto')
     keras_model.fit(x=train_x, y=train_y,
                     validation_data = [val_x, val_y],
                     steps_per_epoch = 5,

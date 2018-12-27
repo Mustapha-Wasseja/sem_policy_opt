@@ -1,0 +1,6 @@
+altair
+gym
+pandas
+git+git://github.com/hill-a/stable-baselines@master
+tensorflow
+

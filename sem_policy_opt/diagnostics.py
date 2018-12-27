@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
 
-from keras_models import prep_for_keras_model
+from sem_policy_opt.keras_models import prep_for_keras_model
 
 def run_env(testing_market, price_fn, n_times=1):
 
