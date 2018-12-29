@@ -23,7 +23,7 @@ def run_env(testing_market, price_fn, n_times=1):
         all_data.append(testing_market.data_df)
     return pd.Series(all_rewards), pd.concat(all_data)
 
-def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_market):
+def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_market, n_sims=20):
 
     def pricing_fn_maker(multiplier):
         def new_price_fn(*args, **kwargs):
@@ -35,8 +35,8 @@ def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_ma
 
     for mult in multipliers:
         new_price_fn = pricing_fn_maker(mult)
-        pred_profits, pred_data = run_env(sim_market, new_price_fn, n_times=20)
-        actual_profits, actual_data = run_env(real_market, new_price_fn, n_times=20)
+        pred_profits, pred_data = run_env(sim_market, new_price_fn, n_times=n_sims)
+        actual_profits, actual_data = run_env(real_market, new_price_fn, n_times=n_sims)
         alternative_pricing_profits.append((mult, pred_profits.mean(), actual_profits.mean()))
         alternative_pricing_scenario_details[mult] = {'pred': pred_data,
                                                       'actual': actual_data}

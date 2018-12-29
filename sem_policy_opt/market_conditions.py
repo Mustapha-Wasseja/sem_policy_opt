@@ -6,10 +6,11 @@ from sem_policy_opt.keras_models import prep_for_keras_model
 
 
 class CompetitiveConditions(object):
-    def __init__(self, delta_price_fn=None, qty_fn=None, keras_model=None):
-        self.uses_keras_model = keras_model is not None
+    def __init__(self, delta_price_fn=None, qty_fn=None, predictive_model=None):
+        # TODO: Generalize to use PyMC model
+        self.uses_keras_model = predictive_model is not None
         if self.uses_keras_model:
-            self.model = keras_model
+            self.model = predictive_model
         else:
             self.delta_price_fn = delta_price_fn
             self.qty_fn = qty_fn
