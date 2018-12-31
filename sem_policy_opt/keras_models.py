@@ -42,7 +42,7 @@ def get_keras_model(train_x, train_y, val_x, val_y, verbose=0):
                            y=train_y[0],
                            validation_data = [val_x[:-1], val_y[0]],
                            batch_size=batch_size,
-                           epochs=40, callbacks = [es_monitor],
+                           epochs=50, callbacks = [es_monitor],
                            verbose=verbose)
 
     # early versions had positive cross-demand elasticities. Add price_diff to encourage model
@@ -71,7 +71,7 @@ def get_keras_model(train_x, train_y, val_x, val_y, verbose=0):
                         loss_weights=[0, 4, 1]) # 0 weight on delta_price because that part of model is already fit
     full_model.fit(x=train_x, y=train_y,
                     validation_data = [val_x, val_y],
-                    epochs=40,
+                    epochs=50,
                     batch_size=batch_size,
                     callbacks = [es_monitor],
                     verbose=verbose)

@@ -44,7 +44,7 @@ class Market(gym.Env):
     
     def step(self, action):
         """
-        The agent takes a step in the environment.
+        The agent takes a step in the environment. Arguments and return vals follow gym API conventions
 
         Parameters
         ----------
@@ -63,15 +63,6 @@ class Market(gym.Env):
                  diagnostic information for debugging.
         """
         jetblue_price = action
-        if self.current_day == 0:
-                jetblue_seats_avail = self.seats_per_flight
-                delta_seats_avail = self.seats_per_flight
-        else:
-            prev_day_data_dict = self.__data[-1]
-            jetblue_seats_avail = prev_day_data_dict['jetblue_seats_avail'] - prev_day_data_dict['jetblue_seats_sold']
-            delta_seats_avail = prev_day_data_dict['delta_seats_avail'] - prev_day_data_dict['delta_seats_sold']
-        jetblue_flight_full = jetblue_seats_avail == 0
-        delta_flight_full = delta_seats_avail == 0 
         days_before_flight = self.sales_window_length - self.current_day
 
         delta_price, jetblue_seats_sold, delta_seats_sold = self.market_conditions.get_outcomes(jetblue_price, 
@@ -79,27 +70,28 @@ class Market(gym.Env):
                                                                                                 self.jetblue_demand_signal,
                                                                                                 self.delta_demand_signal, 
                                                                                                 days_before_flight, 
-                                                                                                jetblue_seats_avail, 
-                                                                                                delta_seats_avail 
+                                                                                                self.jetblue_seats_avail, 
+                                                                                                self.delta_seats_avail 
                                                                                                 )
-        jetblue_revenue = jetblue_seats_sold * jetblue_price
-        self.__data.append({'days_before_flight': days_before_flight, 
-                           'demand_level': self.demand_level, 
-                           'jetblue_demand_signal': self.jetblue_demand_signal, 
-                           'delta_demand_signal': self.delta_demand_signal,
-                           'jetblue_seats_avail': jetblue_seats_avail,
-                           'delta_seats_avail': delta_seats_avail,
-                           'jetblue_seats_sold': jetblue_seats_sold, 
-                           'delta_seats_sold': delta_seats_sold,
-                           'jetblue_price': jetblue_price,
-                           'delta_price': delta_price,
-                           'jetblue_revenue': jetblue_revenue})
+        self.jetblue_seats_avail -= jetblue_seats_sold
+        self.delta_seats_avail -= delta_seats_sold
+        self.current_day += 1
+
+        reward = jetblue_seats_sold * jetblue_price
+        detailed_data = dict( days_before_flight = days_before_flight, 
+                              demand_level = self.demand_level, 
+                              jetblue_demand_signal = self.jetblue_demand_signal, 
+                              delta_demand_signal = self.delta_demand_signal,
+                              jetblue_seats_avail = self.jetblue_seats_avail,
+                              delta_seats_avail = self.delta_seats_avail,
+                              jetblue_seats_sold = jetblue_seats_sold, 
+                              delta_seats_sold = delta_seats_sold,
+                              jetblue_price = jetblue_price,
+                              delta_price = delta_price,
+                              jetblue_revenue = reward)
         self._set_next_demand_and_signals() # set before other info in each period, to allow agent to consider it
         obs = self.get_state()
-        reward = jetblue_revenue
-        info = {}
-        self.current_day += 1
-        return obs, reward, self.episode_over, {}
+        return obs, reward, self.episode_over, detailed_data
 
     def _set_next_demand_and_signals(self):
         self.demand_level = self.max_demand_level * np.random.rand()
@@ -132,8 +124,10 @@ class Market(gym.Env):
         -------
         observation (object): the initial observation of the space.
         """
-        self.__data = []
         self.current_day = 0
+        self.jetblue_seats_avail = self.seats_per_flight
+        self.delta_seats_avail = self.seats_per_flight
+
         self._set_next_demand_and_signals()
         return self.get_state()
 
@@ -142,23 +136,12 @@ class Market(gym.Env):
 
     def get_state(self):
         """Get the observation."""
-        if self.current_day > 0:
-            jetblue_seats_avail = self.__data[-1]['jetblue_seats_avail']
-            delta_flight_full = self.__data[-1]['delta_seats_avail'] == 0
-        else:
-            jetblue_seats_avail = self.seats_per_flight
-            delta_flight_full = 0
-                
         obs = [int(i) for i in 
                 [self.jetblue_demand_signal,
                 self.sales_window_length - self.current_day,
-                jetblue_seats_avail,
-                delta_flight_full]]
+                self.jetblue_seats_avail,
+                self.delta_seats_avail == 0]]
         return obs
-
-    @property
-    def data_df(self):
-        return pd.DataFrame(self.__data)
 
     def seed(self, seed):
         random.seed(seed)

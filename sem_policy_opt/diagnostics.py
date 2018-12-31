@@ -3,25 +3,7 @@ import pandas as pd
 from sklearn.metrics import r2_score
 
 from sem_policy_opt.keras_models import prep_for_keras_model
-
-def run_env(testing_market, price_fn, n_times=1):
-
-    all_data = []
-    all_rewards = []
-
-    for _ in range(n_times):
-        obs = testing_market.reset()
-        episode_over = False
-        cum_reward = 0
-
-        while not episode_over:
-            demand_signal, days_before_flight, my_seats_avail, competitor_full = obs
-            my_price = price_fn(demand_signal, days_before_flight, my_seats_avail, competitor_full)
-            obs, reward, episode_over, debug_info = testing_market.step(my_price)
-            cum_reward += reward
-        all_rewards.append(cum_reward)
-        all_data.append(testing_market.data_df)
-    return pd.Series(all_rewards), pd.concat(all_data)
+from sem_policy_opt.run_env import run_env
 
 def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_market, n_sims=20):
 
