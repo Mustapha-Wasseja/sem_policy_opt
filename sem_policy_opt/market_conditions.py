@@ -20,7 +20,7 @@ class CompetitiveConditions(object):
         if self.uses_keras_model:
             prediction_data = prep_for_keras_model([days_before_flight, jetblue_demand_signal, jetblue_price], skip_y=True)
             preds = self.model.predict(prediction_data)
-            delta_price, jetblue_qty, delta_qty = (round(p[0][0]) for p in preds)
+            delta_price, jetblue_qty, delta_qty = (self._probabilistic_rounding(p[0][0]) for p in preds)
         else:       # This case of real rather than simulated market. So we use real demand_level to get quantities
             delta_price = self.delta_price_fn(delta_demand_signal, days_before_flight, delta_seats_avail, jetblue_seats_avail==0)
             jetblue_qty, delta_qty = self.qty_fn(jetblue_price, delta_price, demand_level, jetblue_seats_avail, delta_seats_avail)

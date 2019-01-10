@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
@@ -5,6 +6,36 @@ from sklearn.metrics import r2_score
 from sem_policy_opt.keras_models import prep_for_keras_model
 from sem_policy_opt.run_env import run_env
 
+
+def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult, seats_avail_mult, competitor_full_mult, price_floor=0):
+    def output_fn(demand_signal, days_before_flight, my_seats_avail, competitor_full):
+        base_price = intercept + demand_signal_mult * demand_signal \
+                               + days_before_flight_mult * days_before_flight \
+                               + seats_avail_mult * my_seats_avail \
+                              + competitor_full_mult * competitor_full
+        chosen_price = max(base_price, price_floor)
+        return chosen_price
+    return output_fn
+
+def plot_optim_results(optim_results, baseline_real_profits, baseline_sim_profits):
+    optim_results.plot.scatter(x='sim_profit', y='real_profit')
+    max_sim_profit = max(optim_results.sim_profit)
+    best_result = optim_results.query('sim_profit == @max_sim_profit')
+
+    best_simulated_profit = int(best_result.sim_profit.iloc[0]) 
+    real_attained_profit = int(best_result.real_profit.iloc[0])
+
+    plt.annotate('Profit From Optimized Pricing: ${}'.format(real_attained_profit),
+                 xy=(best_simulated_profit, real_attained_profit),
+                 xytext=(65000, 60000),
+                 arrowprops=dict(width=3, color='r'))
+
+    plt.annotate('Profit From Strategy in Used Training Data: ${}'.format(int(baseline_real_profits)),
+                 xy=(baseline_sim_profits, baseline_real_profits),
+                 xytext=(30000, 20000),
+                 arrowprops=dict(width=2, color='r'))
+    plt.title("Predicted vs Real Profits for Strategies Tried During Optimization")
+    plt.show()
 def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_market, n_sims=20):
 
     def pricing_fn_maker(multiplier):
