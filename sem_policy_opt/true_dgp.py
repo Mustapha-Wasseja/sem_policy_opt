@@ -13,4 +13,3 @@ def get_true_qty_demanded_fn(potential_customers_per_day, customer_level_randomn
         delta_seats_demanded = ((delta_consumer_surplus > jetblue_consumer_surplus) * (delta_consumer_surplus > 0)).sum()
         return jetblue_seats_demanded, delta_seats_demanded
     return true_calc_q
-

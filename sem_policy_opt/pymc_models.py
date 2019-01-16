@@ -5,7 +5,9 @@ from theano import tensor as tt
 import os
 num_cpus = os.cpu_count()
 
-
+"""
+Nothing in this file is in use, and in general it isn't working right now
+"""
 
 class WrappedPymcModel(object):
     def __init__(self, train_data):
@@ -16,10 +18,10 @@ class WrappedPymcModel(object):
         self.jetblue_seats_avail = shared(train_data.jetblue_seats_avail.values)
         self.train_data = train_data
         self._create_model()
-    
+
     def _create_model(self, quicktest=True):
         with pm.Model() as pymc_model:
-            
+
             delta_price_intercept = pm.Normal('delta_price_intercept', mu=0, sd=100)
             cross_demand_signal_coeff_on_price = pm.Normal('cross_demand_signal_coeff_on_price', mu=.5, sd=5)
             seats_remaining_coeff_on_price = pm.Normal('seats_remaining_coeff_on_price', mu=-1, sd=5)
@@ -47,7 +49,7 @@ class WrappedPymcModel(object):
                                         self.days_before_flight * days_before_coeff_on_qty + \
                                         self.jetblue_price * price_multiplier_on_qty + \
                                         delta_price * cross_price_multiplier_on_qty * delta_full)
-    
+
             delta_purchase_prob = pm.math.sigmoid(purchase_prob_intercept +  \
                                         self.jetblue_demand_signal * demand_signal_coeff_on_qty + \
                                         self.days_before_flight * days_before_coeff_on_qty + \
@@ -56,7 +58,7 @@ class WrappedPymcModel(object):
 
             max_seats_sold = max(self.train_data.jetblue_seats_sold.max(), self.train_data.delta_seats_sold.max())
             potential_customers = pm.DiscreteUniform('potential_customers', max_seats_sold, 3 * max_seats_sold)
-    
+
             # Include (1-full) to account for inability to sell on full flights.  Doesn't handle partially limited sales well
             jb_qty = pm.Binomial('jb_qty', n=potential_customers * (1-jb_full), p=jb_purchase_prob, observed=self.train_data.jetblue_seats_sold.values)
             delta_qty = pm.Binomial('delta_qty', n=potential_customers * (1-delta_full), p=delta_purchase_prob, observed=self.train_data.delta_seats_sold.values)

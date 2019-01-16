@@ -1,13 +1,21 @@
+from collections import OrderedDict
+from IPython.display import display, Markdown
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas.plotting import scatter_matrix
 from sklearn.metrics import r2_score
 
-from sem_policy_opt.keras_models import prep_for_keras_model
+from sem_policy_opt.keras_models import prep_for_keras_model, get_keras_model
 from sem_policy_opt.run_env import run_env
+from sem_policy_opt.market_conditions import CompetitiveConditions
 
 
-def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult, seats_avail_mult, competitor_full_mult, price_floor=0):
+def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
+                       seats_avail_mult, competitor_full_mult, price_floor=0):
+    '''
+    Returns pricing function that is linear combination of function arguments
+    '''
     def output_fn(demand_signal, days_before_flight, my_seats_avail, competitor_full):
         base_price = intercept + demand_signal_mult * demand_signal \
                                + days_before_flight_mult * days_before_flight \
@@ -17,52 +25,102 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult, s
         return chosen_price
     return output_fn
 
-def plot_optim_results(optim_results, baseline_real_profits, baseline_sim_profits):
-    optim_results.plot.scatter(x='sim_profit', y='real_profit')
+def plot_optim_results(optim_results, baseline_real_profits=None, baseline_sim_profits=None):
+    '''
+    Plots scatter plot of predicted and simulated profits. Shows plot and returns nothing
+
+    Arguments:
+    ----------
+    optim_results:  DataFrame with sim_profit and real_profit columns. Each row corresponds
+                    to all runs of a single pricing functions
+    baseline_real_profits: Scalar value of real profits from policy used in training data
+    baseline_sim_profits: Scalar value of simulated profits from policy used in training data
+    '''
+    optim_results.plot.scatter(x='sim_profit', y='real_profit', s=4)
     max_sim_profit = max(optim_results.sim_profit)
     best_result = optim_results.query('sim_profit == @max_sim_profit')
 
-    best_simulated_profit = int(best_result.sim_profit.iloc[0]) 
+    best_simulated_profit = int(best_result.sim_profit.iloc[0])
     real_attained_profit = int(best_result.real_profit.iloc[0])
 
     plt.annotate('Profit From Optimized Pricing: ${}'.format(real_attained_profit),
                  xy=(best_simulated_profit, real_attained_profit),
-                 xytext=(65000, 60000),
-                 arrowprops=dict(width=3, color='r'))
+                 xytext=(best_simulated_profit-1, real_attained_profit-15000),
+                 arrowprops=dict(width=1, color='r'))
 
-    plt.annotate('Profit From Strategy in Used Training Data: ${}'.format(int(baseline_real_profits)),
-                 xy=(baseline_sim_profits, baseline_real_profits),
-                 xytext=(30000, 20000),
-                 arrowprops=dict(width=2, color='r'))
+    if baseline_real_profits and baseline_sim_profits:
+        plt.annotate('Profit From Strategy Used in Training Data: ${}'.format(int(baseline_real_profits)),
+                    xy=(baseline_sim_profits, baseline_real_profits),
+                    xytext=(baseline_sim_profits, baseline_real_profits-15000),
+                    arrowprops=dict(width=1, color='r'))
     plt.title("Predicted vs Real Profits for Strategies Tried During Optimization")
+    plt.xlabel('Profit in Simulation')
+    plt.ylabel('Profit in Real Env')
     plt.show()
-def test_pricing_multipliers(baseline_price_fn, multipliers, sim_market, real_market, n_sims=20):
 
-    def pricing_fn_maker(multiplier):
-        def new_price_fn(*args, **kwargs):
-            return multiplier * baseline_price_fn(*args, **kwargs)
-        return new_price_fn
-
-    alternative_pricing_profits = []
-    alternative_pricing_scenario_details = {}
-
-    for mult in multipliers:
-        new_price_fn = pricing_fn_maker(mult)
-        pred_profits, pred_data = run_env(sim_market, new_price_fn, n_times=n_sims)
-        actual_profits, actual_data = run_env(real_market, new_price_fn, n_times=n_sims)
-        alternative_pricing_profits.append((mult, pred_profits.mean(), actual_profits.mean()))
-        alternative_pricing_scenario_details[mult] = {'pred': pred_data,
-                                                      'actual': actual_data}
-
-    price_comparison = pd.DataFrame(alternative_pricing_profits, 
-                                    columns=['base_price_mult', 'mean_predicted_rev', 'mean_actual_rev'])
-
-    return price_comparison
 
 def r_squared(model, val_data):
+    '''
+    returns dictionary with r_squared values of model in predicting delta_price, jetblue_seats_sold and delta_seats_sold
+
+    Arguments:
+    ----------
+    model: A model accepting input in the format returned by prep_for_keras_model
+    val_data: DataFrame of raw validation data created by run_env
+    '''
     val_x = prep_for_keras_model(val_data, skip_y=True)
     preds = model.predict(val_x)
-    return {'delta_price_r2': r2_score(val_data.delta_price.values, preds[0].ravel()),
-            'jb_qty_sold_r2': r2_score(val_data.jetblue_seats_sold.values, preds[1].ravel()),
-            'delta_qty_sold_r2': r2_score(val_data.delta_seats_sold.values, preds[2].ravel())}
-    
+    return {'delta_price': round(r2_score(val_data.delta_price.values, preds[0].ravel()),2),
+            'jb_qty_sold': round(r2_score(val_data.jetblue_seats_sold.values, preds[1].ravel()), 2),
+            'delta_qty_sold': round(r2_score(val_data.delta_seats_sold.values, preds[2].ravel()), 2)}
+
+def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=10):
+    sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
+                        for pricing_fn in pricing_fns]
+    real_rewards = [run_env(real_market, pricing_fn, n_times=runs_per_fn)[0].mean()
+                        for pricing_fn in pricing_fns]
+
+    results = pd.DataFrame({'sim_profit': sim_rewards,
+                            'real_profit': real_rewards})
+    return results
+
+
+def sensitivity_analysis(noisy_real_market_maker,
+                         noisy_sim_market_maker,
+                         noise_levels,
+                         pricing_fns,
+                         flights_in_training_data,
+                         baseline_price_fn):
+
+    results = []
+    for noise_level in noise_levels:
+
+        real_market = noisy_real_market_maker(noise_level)
+        train_profits, train_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
+        val_profits, val_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
+        train_x, train_y = prep_for_keras_model(train_data)
+        val_x, val_y = prep_for_keras_model(val_data)
+        predictive_model = get_keras_model(train_x, train_y, val_x, val_y, verbose=0)
+        sim_market_conditions = CompetitiveConditions(predictive_model=predictive_model)
+        sim_market = noisy_sim_market_maker(noise_level, sim_market_conditions)
+
+        real_and_sim = get_real_and_sim_rewards(real_market, sim_market, pricing_fns)
+        best_sim_profits = real_and_sim.sim_profit.max()
+        real_profits = real_and_sim.real_profit[real_and_sim.sim_profit.idxmax()]
+        best_possible_real_profits = real_and_sim.real_profit.max()
+        r_squared_vals = r_squared(predictive_model, val_data)
+
+        display(Markdown('---'))
+        print("noise level: {}".format(noise_level))
+        print("r_squared values: {}".format(r_squared_vals))
+        plot_optim_results(real_and_sim)
+
+        results.append(OrderedDict(noise_level = noise_level,
+                                   own_qty_r_squared =  r_squared_vals['jb_qty_sold'],
+                                   competitor_qty_r_squared = r_squared_vals['delta_qty_sold'],
+                                   baseline_profits = int(train_profits.mean()),
+                                   real_profits = int(real_profits),
+                                   best_sim_profits =  int(best_sim_profits),
+                                   best_possible_real_profits = int(best_possible_real_profits)))
+    results_df = pd.DataFrame(results)
+    return results_df
