@@ -30,13 +30,19 @@ class CompetitiveConditions(object):
                                                     jetblue_price], skip_y=True)
             preds = self.model.predict(prediction_data)
             delta_price, jetblue_qty, delta_qty = (self._probabilistic_rounding(p[0][0]) for p in preds)
-        else:       # This case of real rather than simulated market. So we use real demand_level to get quantities
-            delta_price = self.delta_price_fn(delta_demand_signal, days_before_flight, delta_seats_avail, jetblue_seats_avail==0)
-            jetblue_qty, delta_qty = self.qty_fn(jetblue_price, delta_price, demand_level, jetblue_seats_avail, delta_seats_avail)
+        else:       # Real rather than simulated market. So we use real demand_level to get quantities
+            delta_price = self.delta_price_fn(delta_demand_signal, days_before_flight,
+                                              delta_seats_avail, jetblue_seats_avail==0)
+            jetblue_qty, delta_qty = self.qty_fn(jetblue_price, delta_price, demand_level,
+                                                 jetblue_seats_avail, delta_seats_avail)
+
         jetblue_seats_sold = np.clip(jetblue_qty, 0, jetblue_seats_avail)
         delta_seats_sold = np.clip(delta_qty, 0, delta_seats_avail)
         delta_price = max(0, delta_price)
-        jetblue_seats_sold, delta_seats_sold, delta_price = (self._probabilistic_rounding(i) for i in (jetblue_seats_sold, delta_seats_sold, delta_price))
+        jetblue_seats_sold, delta_seats_sold, delta_price = (self._probabilistic_rounding(i)
+                                                                for i in (jetblue_seats_sold,
+                                                                          delta_seats_sold,
+                                                                          delta_price))
         return delta_price, jetblue_seats_sold, delta_seats_sold
 
     def _probabilistic_rounding(self, num):

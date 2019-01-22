@@ -35,6 +35,7 @@ def wrap_pricing_agent(raw_agent):
     # TODO: Uncomment after fixing stable_baselines in kernels
     #elif isinstance(raw_agent, stable_baselines.common.base_class.BaseRLModel):
     #    def pricing_fn(arg_array):
-    #        return raw_agent.predict(arg_array)[0][0]   # first [0] gets the action and removes LSTM specific stuff. Second [0] converts to scalar
+    #        first [0] below gets action and removes LSTM specific stuff. Second [0] converts to scalar
+    #        return raw_agent.predict(arg_array)[0][0]
     #    return pricing_fn
     assert NotImplementedError
