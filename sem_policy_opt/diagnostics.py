@@ -6,7 +6,7 @@ import pandas as pd
 from pandas.plotting import scatter_matrix
 from sklearn.metrics import r2_score
 
-from sem_policy_opt.keras_models import prep_for_keras_model, get_keras_model
+from sem_policy_opt.keras_models import WrappedKerasModel
 from sem_policy_opt.run_env import run_env
 from sem_policy_opt.market_conditions import CompetitiveConditions
 
@@ -61,18 +61,17 @@ def plot_optim_results(optim_results, baseline_real_profits=None, baseline_sim_p
 
 def r_squared(model, val_data):
     '''
-    returns dictionary with r_squared values of model in predicting delta_price, jetblue_seats_sold and delta_seats_sold
+    returns dictionary with r_squared values of model in predicting delta_price, jb_qty_sold and delta_qty_sold
 
     Arguments:
     ----------
-    model: A model accepting input in the format returned by prep_for_keras_model
+    model: A model accepting input in the format returned by prep_for_pred
     val_data: DataFrame of raw validation data created by run_env
     '''
-    val_x = prep_for_keras_model(val_data, skip_y=True)
-    preds = model.predict(val_x)
-    return {'delta_price': round(r2_score(val_data.delta_price.values, preds[0].ravel()),2),
-            'jb_qty_sold': round(r2_score(val_data.jetblue_seats_sold.values, preds[1].ravel()), 2),
-            'delta_qty_sold': round(r2_score(val_data.delta_seats_sold.values, preds[2].ravel()), 2)}
+    preds = model.predict(val_data)
+    import pdb; pdb.set_trace()
+    out = {targ: round(r2_score(val_data[targ].values, pred[0]), 2) for targ, pred in preds.items()}
+    return out
 
 def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=10):
     sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
@@ -98,9 +97,7 @@ def sensitivity_analysis(noisy_real_market_maker,
         real_market = noisy_real_market_maker(noise_level)
         train_profits, train_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
         val_profits, val_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
-        train_x, train_y = prep_for_keras_model(train_data)
-        val_x, val_y = prep_for_keras_model(val_data)
-        predictive_model = get_keras_model(train_x, train_y, val_x, val_y, verbose=0)
+        predictive_model = get_keras_model(train_data, verbose=0)
         sim_market_conditions = CompetitiveConditions(predictive_model=predictive_model)
         sim_market = noisy_sim_market_maker(noise_level, sim_market_conditions)
 

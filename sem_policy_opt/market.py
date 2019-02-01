@@ -21,6 +21,7 @@ class Market(gym.Env):
         self.demand_signal_noisiness = demand_signal_noisiness
         self.seats_per_flight = seats_per_flight
         self.sales_window_length = sales_window_length
+        # TODO: Get RL working. Stopped maintaining this because stable_baselines couldn't be installed in Kaggle Kernels
         self.__setup_for_RL()
         self.reset()
 
@@ -36,9 +37,10 @@ class Market(gym.Env):
         else:
             low_action_space = 0
 
+        # The price we set
         self.action_space = spaces.Box(low=low_action_space,
                                        high=self.max_demand_level,
-                                       shape=(1,), dtype=np.int32)  # The price we set
+                                       shape=(1,), dtype=np.int32)  
 
         obs_space_low = np.array([0,                             # days remaining
                                   -1 * self.max_demand_level,    # demand signal
@@ -74,46 +76,46 @@ class Market(gym.Env):
             info (dict) :
                  diagnostic information for debugging.
         """
-        jetblue_price = action
+        jb_price = action
         days_before_flight = self.sales_window_length - self.current_day
 
-        delta_price, jetblue_seats_sold, delta_seats_sold = self.market_conditions.get_outcomes(jetblue_price,
-                                                                                                self.demand_level,
-                                                                                                self.jetblue_demand_signal,
-                                                                                                self.delta_demand_signal,
-                                                                                                days_before_flight,
-                                                                                                self.jetblue_seats_avail,
-                                                                                                self.delta_seats_avail
-                                                                                                )
-        self.jetblue_seats_avail -= jetblue_seats_sold
-        self.delta_seats_avail -= delta_seats_sold
+        delta_price, jb_qty_sold, delta_qty_sold = self.market_conditions.get_outcomes(jb_price,
+                                                                                       self.demand_level,
+                                                                                       self.jb_demand_signal,
+                                                                                       self.delta_demand_signal,
+                                                                                       days_before_flight,
+                                                                                       self.jb_seats_avail,
+                                                                                       self.delta_seats_avail
+                                                                                       )
+        self.jb_seats_avail -= jb_qty_sold
+        self.delta_seats_avail -= delta_qty_sold
         self.current_day += 1
 
-        reward = jetblue_seats_sold * jetblue_price
+        reward = jb_qty_sold * jb_price
         detailed_data = dict( days_before_flight = days_before_flight,
                               demand_level = self.demand_level,
-                              jetblue_demand_signal = self.jetblue_demand_signal,
+                              jb_demand_signal = self.jb_demand_signal,
                               delta_demand_signal = self.delta_demand_signal,
-                              jetblue_seats_avail = self.jetblue_seats_avail,
+                              jb_seats_avail = self.jb_seats_avail,
                               delta_seats_avail = self.delta_seats_avail,
-                              jetblue_seats_sold = jetblue_seats_sold,
-                              delta_seats_sold = delta_seats_sold,
-                              jetblue_price = jetblue_price,
+                              jb_qty_sold = jb_qty_sold,
+                              delta_qty_sold = delta_qty_sold,
+                              jb_price = jb_price,
                               delta_price = delta_price,
-                              jetblue_revenue = reward)
+                              jb_revenue = reward)
         self._set_next_demand_and_signals() # set before other info in each period, to allow agent to consider it
         obs = self.get_state()
         return obs, reward, self.episode_over, detailed_data
 
     def _set_next_demand_and_signals(self):
         self.demand_level = self.max_demand_level * np.random.rand()
-        self.jetblue_demand_signal = round(self.demand_level + self.demand_signal_noisiness * np.random.randn())
+        self.jb_demand_signal = round(self.demand_level + self.demand_signal_noisiness * np.random.randn())
         self.delta_demand_signal = round(self.demand_level + self.demand_signal_noisiness * np.random.randn())
 
     @property
     def episode_over(self):
         return (self.current_day == self.sales_window_length) or \
-               (self.jetblue_seats_avail == 0)
+               (self.jb_seats_avail == 0)
 
     def reset(self):
         """
@@ -124,7 +126,7 @@ class Market(gym.Env):
         observation (object): the initial observation of the space.
         """
         self.current_day = 0
-        self.jetblue_seats_avail = self.seats_per_flight
+        self.jb_seats_avail = self.seats_per_flight
         self.delta_seats_avail = self.seats_per_flight
 
         self._set_next_demand_and_signals()
@@ -136,11 +138,14 @@ class Market(gym.Env):
 
     def get_state(self):
         """Get the observation (visible state of the environment) to pass back to agent"""
-        obs = [int(i) for i in
-                [self.jetblue_demand_signal,
-                self.sales_window_length - self.current_day,
-                self.jetblue_seats_avail,
-                self.delta_seats_avail == 0]]
+        try:
+            obs = [int(i) for i in
+                    [self.jb_demand_signal,
+                    self.sales_window_length - self.current_day,
+                    self.jb_seats_avail,
+                    self.delta_seats_avail == 0]]
+        except:
+            import pdb; pdb.set_trace()
         return obs
 
     def seed(self, seed):
