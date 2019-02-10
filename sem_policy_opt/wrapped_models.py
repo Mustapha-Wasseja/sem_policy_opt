@@ -3,14 +3,17 @@ from warnings import filterwarnings
 filterwarnings('ignore')
 
 class WrappedModel(object):
+    """Base class being used to wrap PyMC and Keras models (and more in future)
+    Currently hard-codes info about the airline problem in predictor_names and target_names attributes
+    """
     def __init__(self, train_data):
         self.train_data = train_data
         self.predictor_names = ["days_before_flight", "jb_demand_signal", "jb_price"]
-        self.target_names = ['delta_price', 'jb_seats_sold', 'delta_seats_sold']
+        self.target_names = ['delta_price', 'jb_qty_sold', 'delta_qty_sold']
         self.n_features = len(self.predictor_names)
         self.train_X = self.train_data[self.predictor_names]
-        self._model_prep()
-        self._make_fitted_model()
+        self._model_prep()      # TODO: move to specific model layer.
+        self.model = self._make_fitted_model()
 
     def _model_prep(self):
         self.scaler = StandardScaler()

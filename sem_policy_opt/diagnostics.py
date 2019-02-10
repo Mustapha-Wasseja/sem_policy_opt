@@ -15,6 +15,8 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
                        seats_avail_mult, competitor_full_mult, price_floor=0):
     '''
     Returns pricing function that is linear combination of function arguments
+
+    Each argument is a list or numpy array of candidate values in grid to be created
     '''
     def output_fn(demand_signal, days_before_flight, my_seats_avail, competitor_full):
         base_price = intercept + demand_signal_mult * demand_signal \
@@ -69,11 +71,10 @@ def r_squared(model, val_data):
     val_data: DataFrame of raw validation data created by run_env
     '''
     preds = model.predict(val_data)
-    import pdb; pdb.set_trace()
-    out = {targ: round(r2_score(val_data[targ].values, pred[0]), 2) for targ, pred in preds.items()}
+    out = {targ: round(r2_score(val_data[targ].values, pred), 2) for targ, pred in preds.items()}
     return out
 
-def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=10):
+def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=15):
     sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
                         for pricing_fn in pricing_fns]
     real_rewards = [run_env(real_market, pricing_fn, n_times=runs_per_fn)[0].mean()
@@ -88,16 +89,34 @@ def sensitivity_analysis(noisy_real_market_maker,
                          noisy_sim_market_maker,
                          noise_levels,
                          pricing_fns,
+                         model_class,
                          flights_in_training_data,
                          baseline_price_fn):
+    '''
+    Recreates most of the analysis in the original notebook for varying levels of noise in the demand signals.
 
+    For each level of noise in noise_levels:
+    1) Create a real environment with that amount of demand signal noise, and collect training data from that env
+    2) Train predictive model on this training data. Make a sim_env from this
+    3) Try all pricing policies in pricing_fns in this sim_env and the real_env created in step 1. 
+       Record resulting profit.
+    Return DF of profits
+
+    Arguments
+    ---------
+    TODO: write this
+
+    Returns
+    -------
+    TODO: write this    
+    '''
     results = []
     for noise_level in noise_levels:
 
         real_market = noisy_real_market_maker(noise_level)
         train_profits, train_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
         val_profits, val_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
-        predictive_model = get_keras_model(train_data, verbose=0)
+        predictive_model = model_class(train_data)
         sim_market_conditions = CompetitiveConditions(predictive_model=predictive_model)
         sim_market = noisy_sim_market_maker(noise_level, sim_market_conditions)
 

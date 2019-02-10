@@ -138,14 +138,11 @@ class Market(gym.Env):
 
     def get_state(self):
         """Get the observation (visible state of the environment) to pass back to agent"""
-        try:
-            obs = [int(i) for i in
-                    [self.jb_demand_signal,
-                    self.sales_window_length - self.current_day,
-                    self.jb_seats_avail,
-                    self.delta_seats_avail == 0]]
-        except:
-            import pdb; pdb.set_trace()
+        obs = [int(i) for i in
+                [self.jb_demand_signal,
+                self.sales_window_length - self.current_day,
+                self.jb_seats_avail,
+                self.delta_seats_avail == 0]]
         return obs
 
     def seed(self, seed):
