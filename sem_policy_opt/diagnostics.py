@@ -69,8 +69,7 @@ def r_squared(model, val_data):
     val_data: DataFrame of raw validation data created by run_env
     '''
     preds = model.predict(val_data)
-    import pdb; pdb.set_trace()
-    out = {targ: round(r2_score(val_data[targ].values, pred[0]), 2) for targ, pred in preds.items()}
+    out = {targ: round(r2_score(val_data[targ].values, pred), 2) for targ, pred in preds.items()}
     return out
 
 def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=10):
@@ -88,6 +87,7 @@ def sensitivity_analysis(noisy_real_market_maker,
                          noisy_sim_market_maker,
                          noise_levels,
                          pricing_fns,
+                         model_class,
                          flights_in_training_data,
                          baseline_price_fn):
 
@@ -97,7 +97,7 @@ def sensitivity_analysis(noisy_real_market_maker,
         real_market = noisy_real_market_maker(noise_level)
         train_profits, train_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
         val_profits, val_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
-        predictive_model = get_keras_model(train_data, verbose=0)
+        predictive_model = model_class(train_data)
         sim_market_conditions = CompetitiveConditions(predictive_model=predictive_model)
         sim_market = noisy_sim_market_maker(noise_level, sim_market_conditions)
 

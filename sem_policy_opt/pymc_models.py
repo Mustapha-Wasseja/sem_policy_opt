@@ -2,7 +2,7 @@ import numpy as np
 from numpy.random import randn
 import pandas as pd
 import pymc3 as pm
-from pymc3.math import dot
+from pymc3.math import dot, tanh
 import theano
 from theano import shared
 from theano import tensor as tt
@@ -47,49 +47,51 @@ class WrappedPymcModel(WrappedModel):
 
             act_1 = relu(dot(self.model_input, weights_in_1))
             act_2 = relu(dot(act_1, weights_1_2))
-            jb_sold_lambda = softplus(dot(act_2, weights_jb_out))
-            delta_sold_lambda = softplus(dot(act_2, weights_delta_out))
+
+            jb_sold_intercept = pm.Normal('jb_sold_intercept', 0, sd=10)
+            delta_sold_intercept = pm.Normal('delta_sold_intercept', 0, sd=10)
+            jb_sold_lambda = softplus(dot(act_2, weights_jb_out) + jb_sold_intercept)
+            delta_sold_lambda = softplus(dot(act_2, weights_delta_out) + delta_sold_intercept)
 
             # outputs
-            self.jb_qty_node = pm.Poisson('jb_qty_sold',
+            jb_qty_node = pm.Poisson('jb_qty_sold',
                                  jb_sold_lambda,
                                  observed=self.jb_qty_sold_output
                                  )
-            self.delta_qty_node = pm.Poisson('delta_qty_sold',
+            delta_qty_node = pm.Poisson('delta_qty_sold',
                                     delta_sold_lambda,
                                     observed=self.delta_qty_sold_output
                                     )
 
         with neural_network:
-            inference = pm.SVGD(n_particles=500, jitter=1)
-            self.approx = inference.approx
+            inference = pm.ADVI()
+            self.approx = pm.fit(n=15000, method=inference)
+        self.pred_fns = self._get_pred_fns(neural_network)
+        return neural_network
 
-        self.model = neural_network
-        #self.trace = self.approx.sample(draws=trace_size)
+    def _get_pred_fns(self, model):
+
+        def get_conditional_poisson_param_fn(var):
+            # set up placeholder tensors
+            x = tt.matrix('X')
+            x.tag.test_value = self.train_X.values
+
+            pred_graph = self.approx.sample_node(var.distribution.mu,
+                                                 more_replacements={self.model_input: x})
+            return theano.function([x], pred_graph)
+        return {var.name: get_conditional_poisson_param_fn(var) for var in model.observed_RVs}
 
     def _prep_X(self, data):
-        data = data[self.predictor_names]
-        return self.scaler.transform(data)
-        
-    def predict(self, pred_X, nb_samples=1):
-        if type(pred_X) == list:
+        if type(data) == list:
             # These would be a single dimensional array for each variable.
             # Convert those to standard DF format where each var is a column
-            assert all(a.ndim==1 for a in pred_X)
-            pred_X = pd.DataFrame(data=np.hstack([i[:, np.newaxis] for i in pred_X]),
-                                 columns=self.predictor_names)
-        n_rows = pred_X.shape[0]
+            assert all(a.ndim==1 for a in data)
+            data = pd.DataFrame(data=np.hstack([i[:, np.newaxis] for i in data]),
+                                columns=self.predictor_names)
+        out_data = data[self.predictor_names].values
+        return self.scaler.transform(out_data)
+
+    def predict(self, pred_X, nb_samples=1):
         transformed_data = self._prep_X(pred_X)
-        import pdb; pdb.set_trace()
-        
-        with self.model:
-            jb_qty_preds = self.approx.sample_node(self.jb_qty_node, 
-                                                   more_replacements={self.model_input: transformed_data}).eval()
-            delta_qty_preds = self.approx.sample_node(self.delta_qty_node,
-                                                      more_replacements={self.model_input: transformed_data}).eval()
-        preds = {'jb_qty_sold': jb_qty_preds,
-                 'delta_qty_sold': delta_qty_preds,
-                 'delta_price': np.full_like(jb_qty_preds, np.nan)}
-        print(pred_X.shape)
-        print(preds['jb_qty_sold'].shape)
+        preds = {targ_name: pred_fn(transformed_data) for targ_name, pred_fn in self.pred_fns.items()}
         return preds

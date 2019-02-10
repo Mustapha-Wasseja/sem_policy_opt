@@ -22,7 +22,6 @@ def run_env(my_market, pricing_agent, n_times=1):
             obs, reward, _, detailed_data = my_market.step(my_price)
             episode_reward += reward
             all_data.append(detailed_data)
-
         all_rewards.append(episode_reward)
     return pd.Series(all_rewards), pd.DataFrame(all_data)
 
