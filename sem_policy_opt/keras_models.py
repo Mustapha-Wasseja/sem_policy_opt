@@ -48,7 +48,7 @@ class WrappedKerasModel(WrappedModel):
         x0 = Dense(100, activation='elu', name='x0')(inputs_without_jb_price)
         delta_price = Dense(1, activation='softplus', name='delta_price')(x0)
 
-        # Build just the part of the model that predicts delta_price. This doesn't include jetblue_price
+        # Build part of the model that predicts delta_price. Don't include jetblue_price
         # as an input because delta can't see that.
         delta_price_model = Model(inputs=[days_before_flight, jb_demand_signal],
                                   outputs=[delta_price])
@@ -63,7 +63,8 @@ class WrappedKerasModel(WrappedModel):
         # early versions had positive cross-demand elasticities. Add price_diff to encourage model
         # to view direct effect of jb price, and outweigh it's use as proxy for demand
         price_diff = Subtract()([jb_price, delta_price])
-        qty_predictors = Concatenate()([inputs_without_jb_price, delta_price, jb_price, price_diff])
+        qty_predictors = Concatenate()([inputs_without_jb_price, delta_price, 
+                                        jb_price, price_diff])
 
         x1 = Dense(100, activation='elu')(qty_predictors)
         x2 = Dropout(0.5)(x1)
@@ -78,14 +79,15 @@ class WrappedKerasModel(WrappedModel):
 
         # Freeze layers that predict delta_price and train model to predict quantities
         # Setting layers to trainable is tricky because they change identity when put into a model
-        # so delta_price.trainable = False loses the trainable property and delta_model is not in full_model.layers
+        # so delta_price.trainable = False is lost when putting layer into model
         self._copy_and_lock_weights(src=delta_price_model, 
                                     targ=full_model, 
                                     layer_names = ['x0', 'delta_price'])
 
         full_model.compile(optimizer='adam',
                             loss=['mse', 'poisson', 'poisson'],
-                            loss_weights=[0, 4, 1]) # 0 weight on delta_price because that part of model is already fit
+                            # 0 weight on delta_price because that part of model is already fit
+                            loss_weights=[0, 4, 1]) 
         full_model.fit(x=train_x, y=train_y,
                         epochs=40,
                         batch_size=500,

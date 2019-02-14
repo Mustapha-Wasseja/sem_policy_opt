@@ -8,7 +8,6 @@ from sklearn.metrics import r2_score
 
 from sem_policy_opt.keras_models import WrappedKerasModel
 from sem_policy_opt.run_env import run_env
-from sem_policy_opt.market_conditions import CompetitiveConditions
 
 
 def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
@@ -16,9 +15,10 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
     '''
     Returns pricing function that is linear combination of function arguments
 
-    Each argument is a list or numpy array of candidate values in grid to be created
+    Each argument is a list or numpy array of candidate values in output grid
     '''
-    def output_fn(demand_signal, days_before_flight, my_seats_avail, competitor_full):
+    def output_fn(demand_signal, days_before_flight, 
+                  my_seats_avail, competitor_full):
         base_price = intercept + demand_signal_mult * demand_signal \
                                + days_before_flight_mult * days_before_flight \
                                + seats_avail_mult * my_seats_avail \
@@ -27,16 +27,20 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
         return chosen_price
     return output_fn
 
-def plot_optim_results(optim_results, baseline_real_profits=None, baseline_sim_profits=None):
+def plot_optim_results(optim_results, 
+                       baseline_real_profits=None,
+                       baseline_sim_profits=None):
     '''
-    Plots scatter plot of predicted and simulated profits. Shows plot and returns nothing
+    Plots scatter plot of predicted and simulated profits. 
+    
+    Shows plot and returns nothing
 
     Arguments:
     ----------
-    optim_results:  DataFrame with sim_profit and real_profit columns. Each row corresponds
-                    to all runs of a single pricing functions
-    baseline_real_profits: Scalar value of real profits from policy used in training data
-    baseline_sim_profits: Scalar value of simulated profits from policy used in training data
+    optim_results:  DataFrame with sim_profit and real_profit columns. 
+                    A row corresponds to all runs of a single pricing functions
+    baseline_real_profits: Real profits from policy used in training data
+    baseline_sim_profits: Simulated profits from policy used in training data
     '''
     optim_results.plot.scatter(x='sim_profit', y='real_profit', s=4)
     max_sim_profit = max(optim_results.sim_profit)
@@ -63,7 +67,8 @@ def plot_optim_results(optim_results, baseline_real_profits=None, baseline_sim_p
 
 def r_squared(model, val_data):
     '''
-    returns dictionary with r_squared values of model in predicting delta_price, jb_qty_sold and delta_qty_sold
+    returns dictionary with r_squared values of model 
+    on delta_price, jb_qty_sold and delta_qty_sold
 
     Arguments:
     ----------
@@ -71,7 +76,8 @@ def r_squared(model, val_data):
     val_data: DataFrame of raw validation data created by run_env
     '''
     preds = model.predict(val_data)
-    out = {targ: round(r2_score(val_data[targ].values, pred), 2) for targ, pred in preds.items()}
+    out = {targ: round(r2_score(val_data[targ].values, pred), 2) 
+                    for targ, pred in preds.items()}
     return out
 
 def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=15):
@@ -93,14 +99,15 @@ def sensitivity_analysis(noisy_real_market_maker,
                          flights_in_training_data,
                          baseline_price_fn):
     '''
-    Recreates most of the analysis in the original notebook for varying levels of noise in the demand signals.
+    Recreates most analysis in original notebook for varying levels of noise
+    in the demand signals.
 
     For each level of noise in noise_levels:
-    1) Create a real environment with that amount of demand signal noise, and collect training data from that env
+    1) Create a real environment with that amount of demand signal noise, and 
+    collect training data from that env
     2) Train predictive model on this training data. Make a sim_env from this
-    3) Try all pricing policies in pricing_fns in this sim_env and the real_env created in step 1. 
-       Record resulting profit.
-    Return DF of profits
+    3) Try all pricing policies in pricing_fns in this sim_env and the real_env 
+    created in step 1.  Record resulting profit, and return DF of profits
 
     Arguments
     ---------
@@ -114,11 +121,14 @@ def sensitivity_analysis(noisy_real_market_maker,
     for noise_level in noise_levels:
 
         real_market = noisy_real_market_maker(noise_level)
-        train_profits, train_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
-        val_profits, val_data = run_env(real_market, baseline_price_fn, n_times=flights_in_training_data)
+        train_profits, train_data = run_env(real_market, 
+                                            baseline_price_fn, 
+                                            n_times=flights_in_training_data)
+        val_profits, val_data = run_env(real_market, 
+                                        baseline_price_fn, 
+                                        n_times=flights_in_training_data)
         predictive_model = model_class(train_data)
-        sim_market_conditions = CompetitiveConditions(predictive_model=predictive_model)
-        sim_market = noisy_sim_market_maker(noise_level, sim_market_conditions)
+        sim_market = noisy_sim_market_maker(noise_level, predictive_model)
 
         real_and_sim = get_real_and_sim_rewards(real_market, sim_market, pricing_fns)
         best_sim_profits = real_and_sim.sim_profit.max()
