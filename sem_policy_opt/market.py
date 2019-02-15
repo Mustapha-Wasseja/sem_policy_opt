@@ -14,13 +14,12 @@ class Market(gym.Env):
     OpenAI Gym compatible implementation of the structural model for Airline problem
     '''
 
-    def __init__(self, model, max_demand_level, demand_signal_noisiness, 
-                 seats_per_flight, sales_window_length):
+    def __init__(self, model, market_details):
         self.model = model
-        self.max_demand_level = max_demand_level
-        self.demand_signal_noisiness = demand_signal_noisiness
-        self.seats_per_flight = seats_per_flight
-        self.sales_window_length = sales_window_length
+        self.max_demand_level = market_details['max_demand_level']
+        self.demand_signal_noisiness = market_details['demand_signal_noisiness']
+        self.seats_per_flight = market_details['seats_per_flight']
+        self.sales_window_length = market_details['sales_window_length']
         self.__setup_for_RL()
         self.reset()
 

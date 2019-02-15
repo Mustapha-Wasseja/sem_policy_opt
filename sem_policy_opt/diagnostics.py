@@ -7,6 +7,7 @@ from pandas.plotting import scatter_matrix
 from sklearn.metrics import r2_score
 
 from sem_policy_opt.keras_models import WrappedKerasModel
+from sem_policy_opt.market import Market
 from sem_policy_opt.run_env import run_env
 
 
@@ -91,12 +92,12 @@ def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=1
     return results
 
 
-def sensitivity_analysis(noisy_real_market_maker,
-                         noisy_sim_market_maker,
-                         noise_levels,
-                         pricing_fns,
+def sensitivity_analysis(real_dgp,
                          model_class,
+                         market_details,
                          flights_in_training_data,
+                         noise_levels,
+                         candidate_pricing_fns,
                          baseline_price_fn):
     '''
     Recreates most analysis in original notebook for varying levels of noise
@@ -120,7 +121,9 @@ def sensitivity_analysis(noisy_real_market_maker,
     results = []
     for noise_level in noise_levels:
 
-        real_market = noisy_real_market_maker(noise_level)
+        alternative_market_details = market_details.copy()
+        alternative_market_details['demand_signal_noisiness'] = noise_level
+        real_market = Market(real_dgp, alternative_market_details)
         train_profits, train_data = run_env(real_market, 
                                             baseline_price_fn, 
                                             n_times=flights_in_training_data)
@@ -128,9 +131,9 @@ def sensitivity_analysis(noisy_real_market_maker,
                                         baseline_price_fn, 
                                         n_times=flights_in_training_data)
         predictive_model = model_class(train_data)
-        sim_market = noisy_sim_market_maker(noise_level, predictive_model)
+        sim_market = Market(predictive_model, alternative_market_details)
 
-        real_and_sim = get_real_and_sim_rewards(real_market, sim_market, pricing_fns)
+        real_and_sim = get_real_and_sim_rewards(real_market, sim_market, candidate_pricing_fns)
         best_sim_profits = real_and_sim.sim_profit.max()
         real_profits = real_and_sim.real_profit[real_and_sim.sim_profit.idxmax()]
         best_possible_real_profits = real_and_sim.real_profit.max()

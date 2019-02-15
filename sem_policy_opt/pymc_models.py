@@ -79,7 +79,7 @@ class WrappedPymcModel(WrappedModel):
 
         with neural_network:
             inference = pm.ADVI()
-            self.approx = pm.fit(n=30000, method=inference)
+            self.approx = pm.fit(n=35000, method=inference)
         self.pred_fns = self._get_pred_fns(neural_network)
         return neural_network
 
