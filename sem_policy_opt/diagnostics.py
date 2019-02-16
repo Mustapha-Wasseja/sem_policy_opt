@@ -60,9 +60,9 @@ def plot_optim_results(optim_results,
                     xy=(baseline_sim_profits, baseline_real_profits),
                     xytext=(baseline_sim_profits, baseline_real_profits-15000),
                     arrowprops=dict(width=1, color='r'))
-    plt.title("Predicted vs Real Profits for Strategies Tried During Optimization")
-    plt.xlabel('Profit in Simulation')
-    plt.ylabel('Profit in Real Env')
+    plt.title("Predicted vs Real Revenue for Alternative Pricing Strategies")
+    plt.xlabel('Revenue in Simulation')
+    plt.ylabel('Revenue in Real Env')
     plt.show()
 
 
@@ -79,9 +79,10 @@ def r_squared(model, val_data):
     preds = model.predict(val_data)
     out = {targ: round(r2_score(val_data[targ].values, pred), 2) 
                     for targ, pred in preds.items()}
+    out.pop('delta_price', None)
     return out
 
-def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=15):
+def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=20):
     sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
                         for pricing_fn in pricing_fns]
     real_rewards = [run_env(real_market, pricing_fn, n_times=runs_per_fn)[0].mean()
@@ -153,3 +154,10 @@ def sensitivity_analysis(real_dgp,
                                    best_possible_real_profits = int(best_possible_real_profits)))
     results_df = pd.DataFrame(results)
     return results_df
+
+def model_comparison_plot(conventional_opt_results, bnn_opt_results):
+    conventional_opt_results['model'] = 'Convential'
+    bnn_opt_results['model'] = 'Bayesian'
+    all_results = pd.concat([conventional_opt_results, bnn_opt_results])
+    all_results.pivot(index='noise_level', values='real_profits', columns='model').plot()
+    plt.show()
