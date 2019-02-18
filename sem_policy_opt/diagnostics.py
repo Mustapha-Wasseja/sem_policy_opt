@@ -50,15 +50,15 @@ def plot_optim_results(optim_results,
     best_simulated_profit = int(best_result.sim_profit.iloc[0])
     real_attained_profit = int(best_result.real_profit.iloc[0])
 
-    plt.annotate('Profit From Optimized Pricing: ${}'.format(real_attained_profit),
+    plt.annotate('Rev From Optimized Pricing: ${}'.format(real_attained_profit),
                  xy=(best_simulated_profit, real_attained_profit),
-                 xytext=(best_simulated_profit-1, real_attained_profit-15000),
+                 xytext=(best_simulated_profit-2000, real_attained_profit-15000),
                  arrowprops=dict(width=1, color='r'))
 
     if baseline_real_profits and baseline_sim_profits:
-        plt.annotate('Profit From Strategy Used in Training Data: ${}'.format(int(baseline_real_profits)),
+        plt.annotate('Rev From Baseline Pricing: ${}'.format(int(baseline_real_profits)),
                     xy=(baseline_sim_profits, baseline_real_profits),
-                    xytext=(baseline_sim_profits, baseline_real_profits-15000),
+                    xytext=(baseline_sim_profits-2000, baseline_real_profits-15000),
                     arrowprops=dict(width=1, color='r'))
     plt.title("Predicted vs Real Revenue for Alternative Pricing Strategies")
     plt.xlabel('Revenue in Simulation')
@@ -128,21 +128,23 @@ def sensitivity_analysis(real_dgp,
         train_profits, train_data = run_env(real_market, 
                                             baseline_price_fn, 
                                             n_times=flights_in_training_data)
-        val_profits, val_data = run_env(real_market, 
-                                        baseline_price_fn, 
-                                        n_times=flights_in_training_data)
-        predictive_model = model_class(train_data)
-        sim_market = Market(predictive_model, alternative_market_details)
 
+        predictive_model = model_class(train_data)
+        # val_data is used only to calculate r^2
+        _, val_data = run_env(real_market, 
+                              baseline_price_fn, 
+                              n_times=flights_in_training_data)
+        display(Markdown('---'))
+        print("noise level: {}".format(noise_level))
+        r_squared_vals = r_squared(predictive_model, val_data)
+        print("r_squared values: {}".format(r_squared_vals))
+
+
+        sim_market = Market(predictive_model, alternative_market_details)
         real_and_sim = get_real_and_sim_rewards(real_market, sim_market, candidate_pricing_fns)
         best_sim_profits = real_and_sim.sim_profit.max()
         real_profits = real_and_sim.real_profit[real_and_sim.sim_profit.idxmax()]
         best_possible_real_profits = real_and_sim.real_profit.max()
-        r_squared_vals = r_squared(predictive_model, val_data)
-
-        display(Markdown('---'))
-        print("noise level: {}".format(noise_level))
-        print("r_squared values: {}".format(r_squared_vals))
         plot_optim_results(real_and_sim)
 
         results.append(OrderedDict(noise_level = noise_level,
