@@ -79,10 +79,9 @@ def r_squared(model, val_data):
     preds = model.predict(val_data)
     out = {targ: round(r2_score(val_data[targ].values, pred), 2) 
                     for targ, pred in preds.items()}
-    out.pop('delta_price', None)
     return out
 
-def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=20):
+def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=25):
     sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
                         for pricing_fn in pricing_fns]
     real_rewards = [run_env(real_market, pricing_fn, n_times=runs_per_fn)[0].mean()

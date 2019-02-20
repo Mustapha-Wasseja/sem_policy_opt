@@ -62,6 +62,7 @@ class WrappedPymcModel(WrappedModel):
             delta_sold_lambda = softplus(dot(act_2, weights_delta_out) + delta_sold_intercept)
             delta_price_mu = dot(act_2, weights_delta_price)
             
+            delta_price_sd = pm.Uniform('delta_price_sd', lower=0, upper=200)
             # outputs
             jb_qty_node = pm.Poisson('jb_qty_sold',
                                  jb_sold_lambda,
@@ -74,7 +75,7 @@ class WrappedPymcModel(WrappedModel):
             delta_price_node = pm.Normal('delta_price',
                                     delta_price_mu,
                                     # Use large SD as hack to give price preds lower "weight" than qty
-                                    sd=100,     
+                                    sd=delta_price_sd,
                                     observed=self.delta_price)
 
         with neural_network:
