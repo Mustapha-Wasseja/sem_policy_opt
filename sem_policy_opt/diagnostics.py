@@ -28,41 +28,52 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
         return chosen_price
     return output_fn
 
-def plot_optim_results(optim_results, 
-                       baseline_real_profits=None,
-                       baseline_sim_profits=None):
+def plot_optim_results(sim_revs, 
+                       real_rev,
+                       baseline_real_rev=None,
+                       extra_title_text=''):
     '''
-    Plots scatter plot of predicted and simulated profits. 
+    Plots scatter plot of predicted and simulated revenue. 
     
     Shows plot and returns nothing
 
     Arguments:
     ----------
-    optim_results:  DataFrame with sim_profit and real_profit columns. 
-                    A row corresponds to all runs of a single pricing functions
-    baseline_real_profits: Real profits from policy used in training data
-    baseline_sim_profits: Simulated profits from policy used in training data
+    sim_revs:  Dictionary keyed by simulator name. Values are arrays of revenues
+    real_revs: Array of revenue from running policies in real DGP. 
+               Order matches sim_revs of results matches ordering of sim_revs
+               in terms of the policies that generate each outcome
+    baseline_real_rev: Real revenue from policy used in training data
     '''
-    optim_results.plot.scatter(x='sim_profit', y='real_profit', s=4)
-    max_sim_profit = max(optim_results.sim_profit)
-    best_result = optim_results.query('sim_profit == @max_sim_profit')
 
-    best_simulated_profit = int(best_result.sim_profit.iloc[0])
-    real_attained_profit = int(best_result.real_profit.iloc[0])
+    assert type(sim_revs) == dict
+    num_sims = len(sim_revs)
+    fig, ax = plt.subplots(1, num_sims, sharey=True)
+    fig.subplots_adjust(top=.8, bottom=0)
+    for i, (sim_name, rev) in enumerate(sim_revs.items()):
+        if len(sim_revs) > 1:
+            my_ax = ax[i]
+        else:
+            my_ax = ax
+        my_ax.scatter(x=rev, y=real_rev, s=4)
+        max_sim_rev = int(max(rev))
+        real_attained_rev = int(real_rev[rev.argmax()])
 
-    plt.annotate('Rev From Optimized Pricing: ${}'.format(real_attained_profit),
-                 xy=(best_simulated_profit, real_attained_profit),
-                 xytext=(best_simulated_profit-2000, real_attained_profit-15000),
-                 arrowprops=dict(width=1, color='r'))
-
-    if baseline_real_profits and baseline_sim_profits:
-        plt.annotate('Rev From Baseline Pricing: ${}'.format(int(baseline_real_profits)),
-                    xy=(baseline_sim_profits, baseline_real_profits),
-                    xytext=(baseline_sim_profits-2000, baseline_real_profits-15000),
-                    arrowprops=dict(width=1, color='r'))
-    plt.title("Predicted vs Real Revenue for Alternative Pricing Strategies")
-    plt.xlabel('Revenue in Simulation')
-    plt.ylabel('Revenue in Real Env')
+        my_ax.annotate('Rev After\nOptimization\n${}'.format(real_attained_rev),
+                     fontsize=9, ha='left', va='center',
+                     xy=(max_sim_rev, real_attained_rev),
+                     xytext=(max_sim_rev-5000, real_attained_rev-15000),
+                     arrowprops=dict(width=.5, color='r'))
+        my_ax.set_title(sim_name, fontsize=11)
+        my_ax.axhline(baseline_real_rev, linestyle=':', linewidth=2)
+        fig.suptitle("Predicted vs Real Revenue for Alternative Pricing Strategies" + \
+                     "\n" + extra_title_text)
+        fig.text(0.5, -.1, 'Revenue in Simulator', ha='center')
+        fig.text(-0.1, 0.5, 'Revenue in Real Env', va='center', rotation='vertical')
+    my_ax.annotate('Baseline Policy Rev\n${}'.format(int(baseline_real_rev)),
+                    fontsize=9, 
+                    xy=(max_sim_rev+1000, baseline_real_rev),
+                    va='center')
     plt.show()
 
 
@@ -81,34 +92,22 @@ def r_squared(model, val_data):
                     for targ, pred in preds.items()}
     return out
 
-def get_real_and_sim_rewards(real_market, sim_market, pricing_fns, runs_per_fn=25):
-    sim_rewards = [run_env(sim_market, pricing_fn, n_times=runs_per_fn)[0].mean()
-                        for pricing_fn in pricing_fns]
-    real_rewards = [run_env(real_market, pricing_fn, n_times=runs_per_fn)[0].mean()
-                        for pricing_fn in pricing_fns]
-
-    results = pd.DataFrame({'sim_profit': sim_rewards,
-                            'real_profit': real_rewards})
-    return results
+def eval_pricing_fns(market, pricing_fns, runs_per_agent=20):
+    rewards = [run_env(market, pricing_fn, n_times=runs_per_agent)[0].mean()
+                for pricing_fn in pricing_fns]
+    return np.array(rewards)
 
 
-def sensitivity_analysis(real_dgp,
-                         model_class,
+def comparative_analysis(real_dgp,
+                         models,
                          market_details,
                          flights_in_training_data,
                          noise_levels,
-                         candidate_pricing_fns,
+                         pricing_fns,
                          baseline_price_fn):
     '''
-    Recreates most analysis in original notebook for varying levels of noise
-    in the demand signals.
-
-    For each level of noise in noise_levels:
-    1) Create a real environment with that amount of demand signal noise, and 
-    collect training data from that env
-    2) Train predictive model on this training data. Make a sim_env from this
-    3) Try all pricing policies in pricing_fns in this sim_env and the real_env 
-    created in step 1.  Record resulting profit, and return DF of profits
+    Creates simulators for each noise_level x model class pair. Tests each pricing_fn
+    Displays scatter depicting results
 
     Arguments
     ---------
@@ -121,44 +120,55 @@ def sensitivity_analysis(real_dgp,
     results = []
     for noise_level in noise_levels:
 
+        display(Markdown('---'))
+        print("noise level: {}".format(noise_level))
+
         alternative_market_details = market_details.copy()
         alternative_market_details['demand_signal_noisiness'] = noise_level
         real_market = Market(real_dgp, alternative_market_details)
-        train_profits, train_data = run_env(real_market, 
+        # results for each pricing function in real_market
+        real_results = eval_pricing_fns(real_market, pricing_fns)
+        train_rev, train_data = run_env(real_market, 
                                             baseline_price_fn, 
                                             n_times=flights_in_training_data)
+        all_results_by_model = {}
+        real_rev_by_model = {}
+        top_pred_rev_by_model = {}
+        for model_name, model_class in models.items():
+            predictive_model = model_class(train_data)
 
-        predictive_model = model_class(train_data)
-        # val_data is used only to calculate r^2
-        _, val_data = run_env(real_market, 
-                              baseline_price_fn, 
-                              n_times=flights_in_training_data)
-        display(Markdown('---'))
-        print("noise level: {}".format(noise_level))
-        r_squared_vals = r_squared(predictive_model, val_data)
-        print("r_squared values: {}".format(r_squared_vals))
+            # val_data is used only to calculate r^2
+            _, val_data = run_env(real_market, 
+                                  baseline_price_fn, 
+                                  n_times=flights_in_training_data)
+            r_squared_vals = r_squared(predictive_model, val_data)
+            print("R-squared values in {} model: {}".format(model_name, r_squared_vals))
 
+            sim_market = Market(predictive_model, alternative_market_details)
+            sim_results = eval_pricing_fns(sim_market, pricing_fns)
+            all_results_by_model[model_name] = sim_results
+            top_pred_rev_by_model[model_name] = sim_results.max()
+            real_rev_by_model[model_name] = real_results[sim_results.argmax()]
+        
+        plot_optim_results(all_results_by_model, 
+                          real_results, 
+                          train_rev.mean(),
+                          "Noise Level: {}".format(noise_level))
+        summary_this_noise = {'noise_level': noise_level,
+                              'best_possible_real_rev': int(real_results.max())
+                             }
+        for model_name in models.keys():
+            summary_this_noise[model_name + '_pred_rev'] = int(top_pred_rev_by_model[model_name]),
+            summary_this_noise[model_name + '_optimized_rev'] = int(real_rev_by_model[model_name])
+        results.append(summary_this_noise)
+    overview_df = pd.DataFrame(results).set_index('noise_level')
+    return overview_df
 
-        sim_market = Market(predictive_model, alternative_market_details)
-        real_and_sim = get_real_and_sim_rewards(real_market, sim_market, candidate_pricing_fns)
-        best_sim_profits = real_and_sim.sim_profit.max()
-        real_profits = real_and_sim.real_profit[real_and_sim.sim_profit.idxmax()]
-        best_possible_real_profits = real_and_sim.real_profit.max()
-        plot_optim_results(real_and_sim)
-
-        results.append(OrderedDict(noise_level = noise_level,
-                                   own_qty_r_squared =  r_squared_vals['jb_qty_sold'],
-                                   competitor_qty_r_squared = r_squared_vals['delta_qty_sold'],
-                                   baseline_profits = int(train_profits.mean()),
-                                   real_profits = int(real_profits),
-                                   best_sim_profits =  int(best_sim_profits),
-                                   best_possible_real_profits = int(best_possible_real_profits)))
-    results_df = pd.DataFrame(results)
-    return results_df
-
-def model_comparison_plot(conventional_opt_results, bnn_opt_results):
-    conventional_opt_results['model'] = 'Convential'
-    bnn_opt_results['model'] = 'Bayesian'
-    all_results = pd.concat([conventional_opt_results, bnn_opt_results])
-    all_results.pivot(index='noise_level', values='real_profits', columns='model').plot()
+def model_comparison_plot(comparative_results):
+    comparative_results.Bayesian_optimized_rev.plot()
+    comparative_results.Conventional_optimized_rev.plot()
+    plt.legend(['Bayesian', 'Conventional'])
+    plt.title('Optimized Policy Revenue at Each Noise Level')
+    plt.xlabel('Noise Level')
+    plt.ylabel('Revenue in DGP')
     plt.show()
