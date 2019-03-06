@@ -1,15 +1,11 @@
-from collections import OrderedDict
 from IPython.display import display, Markdown
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas.plotting import scatter_matrix
 from sklearn.metrics import r2_score
 
-from sem_policy_opt.keras_models import WrappedKerasModel
 from sem_policy_opt.market import Market
 from sem_policy_opt.run_env import run_env
-
 
 def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
                        seats_avail_mult, competitor_full_mult, price_floor=0):
@@ -23,13 +19,13 @@ def pricing_fn_creator(intercept, demand_signal_mult, days_before_flight_mult,
         base_price = intercept + demand_signal_mult * demand_signal \
                                + days_before_flight_mult * days_before_flight \
                                + seats_avail_mult * my_seats_avail \
-                              + competitor_full_mult * competitor_full
+                               + competitor_full_mult * competitor_full
         chosen_price = max(base_price, price_floor)
         return chosen_price
     return output_fn
 
 def plot_optim_results(sim_revs, 
-                       real_rev,
+                       real_revs,
                        baseline_real_rev=None,
                        extra_title_text=''):
     '''
@@ -50,14 +46,14 @@ def plot_optim_results(sim_revs,
     num_sims = len(sim_revs)
     fig, ax = plt.subplots(1, num_sims, sharey=True)
     fig.subplots_adjust(top=.8, bottom=0)
-    for i, (sim_name, rev) in enumerate(sim_revs.items()):
+    for i, (sim_name, revs) in enumerate(sim_revs.items()):
         if len(sim_revs) > 1:
             my_ax = ax[i]
         else:
             my_ax = ax
-        my_ax.scatter(x=rev, y=real_rev, s=4)
-        max_sim_rev = int(max(rev))
-        real_attained_rev = int(real_rev[rev.argmax()])
+        my_ax.scatter(x=revs, y=real_revs, s=4)
+        max_sim_rev = int(max(revs))
+        real_attained_rev = int(real_revs[revs.argmax()])
 
         my_ax.annotate('Rev After\nOptimization\n${}'.format(real_attained_rev),
                      fontsize=9, ha='left', va='center',
@@ -65,12 +61,14 @@ def plot_optim_results(sim_revs,
                      xytext=(max_sim_rev-5000, real_attained_rev-15000),
                      arrowprops=dict(width=.5, color='r'))
         my_ax.set_title(sim_name, fontsize=11)
-        my_ax.axhline(baseline_real_rev, linestyle=':', linewidth=2)
         fig.suptitle("Predicted vs Real Revenue for Alternative Pricing Strategies" + \
                      "\n" + extra_title_text)
         fig.text(0.5, -.1, 'Revenue in Simulator', ha='center')
         fig.text(-0.1, 0.5, 'Revenue in Real Env', va='center', rotation='vertical')
-    my_ax.annotate('Baseline Policy Rev\n${}'.format(int(baseline_real_rev)),
+    
+    if baseline_real_rev:
+        my_ax.axhline(baseline_real_rev, linestyle=':', linewidth=2)
+        my_ax.annotate('Baseline Policy Rev\n${}'.format(int(baseline_real_rev)),
                     fontsize=9, 
                     xy=(max_sim_rev+1000, baseline_real_rev),
                     va='center')
@@ -92,7 +90,7 @@ def r_squared(model, val_data):
                     for targ, pred in preds.items()}
     return out
 
-def eval_pricing_fns(market, pricing_fns, runs_per_agent=20):
+def eval_pricing_fns(market, pricing_fns, runs_per_agent=30):
     rewards = [run_env(market, pricing_fn, n_times=runs_per_agent)[0].mean()
                 for pricing_fn in pricing_fns]
     return np.array(rewards)
@@ -136,24 +134,15 @@ def comparative_analysis(real_dgp,
         top_pred_rev_by_model = {}
         for model_name, model_class in models.items():
             predictive_model = model_class(train_data)
-
-            # val_data is used only to calculate r^2
-            _, val_data = run_env(real_market, 
-                                  baseline_price_fn, 
-                                  n_times=flights_in_training_data)
-            r_squared_vals = r_squared(predictive_model, val_data)
-            print("R-squared values in {} model: {}".format(model_name, r_squared_vals))
-
             sim_market = Market(predictive_model, alternative_market_details)
             sim_results = eval_pricing_fns(sim_market, pricing_fns)
             all_results_by_model[model_name] = sim_results
             top_pred_rev_by_model[model_name] = sim_results.max()
             real_rev_by_model[model_name] = real_results[sim_results.argmax()]
         
-        plot_optim_results(all_results_by_model, 
-                          real_results, 
-                          train_rev.mean(),
-                          "Noise Level: {}".format(noise_level))
+        plot_optim_results(sim_revs=all_results_by_model, 
+                          real_revs=real_results, 
+                          extra_title_text="Noise Level: {}".format(noise_level))
         summary_this_noise = {'noise_level': noise_level,
                               'best_possible_real_rev': int(real_results.max())
                              }

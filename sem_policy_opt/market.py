@@ -1,8 +1,4 @@
-# core modules
-import math
 import random
-
-# 3rd party modules
 from gym import spaces
 import gym
 import numpy as np
@@ -164,7 +160,6 @@ class Market(gym.Env):
 
     def seed(self, seed):
         random.seed(seed)
-        np.random.seed
 
 
     def _probabilistic_round(self, num):

@@ -1,5 +1,4 @@
 import pandas as pd
-# import stable_baselines    # disabled until I install it in kernels
 
 def run_env(my_market, pricing_agent, n_times=1):
     """
@@ -12,8 +11,9 @@ def run_env(my_market, pricing_agent, n_times=1):
     all_data = []
     all_rewards = []
 
-    for _ in range(n_times):
+    for i in range(n_times):
         obs = my_market.reset()
+        my_market.seed(i)
         episode_reward = 0.
 
         while not my_market.episode_over:

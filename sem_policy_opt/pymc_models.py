@@ -56,13 +56,13 @@ class WrappedPymcModel(WrappedModel):
 
             jb_sold_intercept = pm.Normal('jb_sold_intercept', 0, sd=10)
             delta_sold_intercept = pm.Normal('delta_sold_intercept', 0, sd=10)
-            delta_price_intercept = pm.Normal('delta_price_intercept', 0, sd=100)
+            delta_price_intercept = pm.Normal('delta_price_intercept', 0, sd=200)
 
             jb_sold_lambda = softplus(dot(act_2, weights_jb_out) + jb_sold_intercept)
             delta_sold_lambda = softplus(dot(act_2, weights_delta_out) + delta_sold_intercept)
             delta_price_mu = dot(act_2, weights_delta_price)
             
-            delta_price_sd = pm.Uniform('delta_price_sd', lower=0, upper=200)
+            delta_price_sd = pm.Uniform('delta_price_sd', lower=0, upper=300)
             # outputs
             jb_qty_node = pm.Poisson('jb_qty_sold',
                                  jb_sold_lambda,
@@ -80,7 +80,7 @@ class WrappedPymcModel(WrappedModel):
 
         with neural_network:
             inference = pm.ADVI()
-            self.approx = pm.fit(n=40000, method=inference)
+            self.approx = pm.fit(n=50000, method=inference)
         self.pred_fns = self._get_pred_fns(neural_network)
         return neural_network
 
@@ -102,7 +102,7 @@ class WrappedPymcModel(WrappedModel):
                                 for var in model.observed_RVs}
 
     def _prep_X(self, data):
-        out_data = data[self.predictor_names].values
+        out_data = data[self.predictor_names]
         return self.scaler.transform(out_data)
 
     def predict(self, pred_X, nb_samples=1):
